@@ -62,11 +62,11 @@ print("✅ Connected:", device.version())
 device.start(sampling_rate, channels)
 
 # ---------------------
-# CSV logger (timestamp relatif, raw EMG, RMS)
+# CSV logger
 # ---------------------
 f = open(csv_file, "w", newline="")
 writer = csv.writer(f)
-writer.writerow(["Timestamp", "Raw_EMG", "RMS"])  # header
+writer.writerow(["Timestamp(s)", "EMG_filtered", "RMS"])  # header baru
 
 # ---------------------
 # Plot Realtime
@@ -79,7 +79,7 @@ ax1.set_ylabel("EMG (filtered)")
 ax1.set_title("Realtime EMG Signal (A1)")
 
 (line2,) = ax2.plot(xdata, list(rms_buffer), lw=0.9, color="red")
-ax2.set_ylim(0, 200)
+ax2.set_ylim(0, 200)  # jaga jangan terlalu kecil
 ax2.set_xlabel("Samples")
 ax2.set_ylabel("EMG Envelope (RMS)")
 
@@ -94,8 +94,9 @@ def update(frame):
         if data is None or len(data) == 0:
             return line1, line2
 
-        # Ambil channel A1 (raw EMG)
-        emg_values = [row[5] for row in data]
+        emg_values = []
+        for row in data:
+            emg_values.append(row[5])  # A1 (raw dari device)
 
         emg_array = np.array(emg_values, dtype=float)
         emg_array = emg_array - np.mean(emg_array)   # DC offset
@@ -113,10 +114,12 @@ def update(frame):
         rms = np.sqrt(np.convolve(squared, kernel, mode="same"))
         smooth_rms = lowpass_filter(rms)
 
-        # Simpan ke CSV (pakai detik sejak start)
-        for raw_val, rms_val in zip(filtered, smooth_rms):
-            timestamp = round(time.time() - start_time, 4)  # presisi 4 digit
-            writer.writerow([timestamp, raw_val, rms_val])
+        # ---------------------
+        # SIMPAN CSV: timestamp batch, EMG filtered, RMS
+        # ---------------------
+        t_now = time.time() - start_time
+        for i in range(len(filtered)):
+            writer.writerow([t_now, filtered[i], smooth_rms[i]])
 
         # Update buffer realtime
         raw_buffer.extend(filtered.tolist())
@@ -143,22 +146,24 @@ plt.tight_layout()
 plt.show()
 
 # ---------------------
-# Save full plot
+# Save full plot (lebih detail)
 # ---------------------
-plt.figure(figsize=(12, 8))
+plt.figure(figsize=(12, 8))  # perbesar tinggi
 
+# Plot raw EMG
 plt.subplot(2, 1, 1)
 plt.plot(all_raw, color="blue", lw=0.7)
 plt.title("Full EMG Recording (Filtered)")
 plt.ylabel("Amplitude")
-plt.ylim(min(all_raw)*1.2, max(all_raw)*1.2)
+plt.ylim(min(all_raw)*1.2, max(all_raw)*1.2)  # auto + margin
 
+# Plot RMS Envelope
 plt.subplot(2, 1, 2)
 plt.plot(all_rms, color="red", lw=0.8)
 plt.title("Full EMG Envelope (RMS)")
 plt.xlabel("Samples")
 plt.ylabel("RMS")
-plt.ylim(0, max(all_rms)*1.2)
+plt.ylim(0, max(all_rms)*1.2)  # auto + margin
 
 plt.tight_layout()
 plt.savefig(png_file, dpi=150)
